@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Manual de Implementación Técnica y SOP - Semillero de Escritura</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --text-color: #c9d1d9;
+            --header-bg: #161b22;
+            --border-color: #30363d;
+            --accent-color: #58a6ff;
+            --code-bg: #161b22;
+            --mark-bg: rgba(210, 153, 34, 0.4);
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            --font-code: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        }
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+        }
+        header {
+            background-color: var(--header-bg);
+            padding: 2rem;
+            border-bottom: 1px solid var(--border-color);
+            text-align: center;
+        }
+        h1, h2, h3, h4 {
+            color: #ffffff;
+            margin-top: 2rem;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+        pre {
+            background-color: var(--code-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 1rem;
+            overflow-x: auto;
+            font-family: var(--font-code);
+            font-size: 0.9rem;
+        }
+        code {
+            font-family: var(--font-code);
+            background-color: rgba(110, 118, 129, 0.4);
+            padding: 0.2em 0.4em;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        pre code {
+            background-color: transparent;
+            padding: 0;
+        }
+        .sop-block {
+            border-left: 4px solid var(--accent-color);
+            padding-left: 1rem;
+            margin-bottom: 2rem;
+            background-color: rgba(88, 166, 255, 0.05);
+            padding: 1rem;
+            border-radius: 0 6px 6px 0;
+        }
+        ul {
+            padding-left: 1.5rem;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 1rem 0;
+        }
+        th, td {
+            border: 1px solid var(--border-color);
+            padding: 0.75rem;
+            text-align: left;
+        }
+        th {
+            background-color: var(--header-bg);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>Sistema Integrado de Asistencia Lectora y Evaluación</h1>
+        <p>Documentación Maestra, Estructura de Datos y Standard Operating Procedure (SOP)</p>
+    </header>
+
+    <div class="container">
+        <section id="vision">
+            <h2>1. Visión y Objetivos del Proyecto</h2>
+            <p>El desarrollo de este sistema dota al semillero de escritura de una infraestructura técnica autónoma que automatiza la extracción, clasificación y consulta de figuras literarias, separando el análisis de obras canónicas de la evaluación de ejercicios estudiantiles.</p>
+            <ul>
+                <li><strong>Democratización del Análisis Estilístico:</strong> Proveer una biblioteca interactiva donde los estudiantes consulten cómo diversos autores emplean estructuras gramaticales complejas. La visualización superpone etiquetas dinámicas sobre párrafos inmutables.</li>
+                <li><strong>Evaluación Objetiva y Escalable:</strong> Integrar un bot de Discord que procese las entregas de los estudiantes y determine el cumplimiento de restricciones estilísticas.</li>
+                <li><strong>Optimización de Costos y Cero Censura:</strong> Utilizar modelos abiertos (vía OpenRouter) para evitar censura en literatura, delegar enrutamiento a Cloudflare Workers, y mantener Supabase como almacenamiento privado.</li>
+            </ul>
+        </section>
+
+        <section id="architecture">
+            <h2>2. Arquitectura y Flujo de Datos</h2>
+            <p>El sistema opera bajo un modelo de tres capas aisladas. Ningún cliente tiene acceso directo a la base de datos.</p>
+<pre>
+                            [ESTUDIANTES Y ADMINISTRADORES]
+                                          │
+                  ┌───────────────────────┴───────────────────────┐
+                  ▼                                               ▼
+      [App 1: Formulario Web / Visualizador]            [App 2: Bot Discord]
+      (Ingesta Atómica y Exploración)                   (Evaluador de Ejercicios)
+                  │                                               │
+                  │ Paso 1: Check de existencia                   │
+                  ├─── Si existe ───► Muestra nodos               │
+                  └─── Si no existe ─► Fragmentación local        │
+                                       (Double newline / \n\n)    │
+                  │                                               │
+                  └─────────┬─────────────────────────────────────┘
+                            │
+                            ▼
+                      ┌────────────────────────────────────────┐
+                      │    CLOUDFLARE WORKERS (SECURITY PROXY) │
+                      │  - Sanitización de Entradas/Salidas    │
+                      │  - Invocación Workers AI (@cf/bge-m3)  │
+                      │  - Aislamiento de base de datos        │
+                      └───────────────────┬────────────────────┘
+                                          │
+                  ┌───────────────────────┴───────────────────────┐
+                  ▼                                               ▼
+      [SUPABASE (POSTGRES + PGVECTOR)]                 [OPENROUTER API]
+      - `authors`                                      - DeepSeek / Llama 3
+      - `works`                                        - Extracción JSON
+      - `chunks` (raw_text + embedding)                - Tagging de subcadenas
+      - `literary_figures` (matched_substrings)        - Evaluación de ejercicios
+      - `student_submissions`
+</pre>
+        </section>
+
+        <section id="file-tree">
+            <h2>3. Árbol de Directorios del Repositorio</h2>
+            <p>El código fuente se organizará estrictamente bajo la siguiente topología para compatibilidad con el entorno de trabajo compartido y las herramientas CLI.</p>
+<pre>
+/
+├── supabase/
+│   └── migrations/
+│       └── 20261015_initial_schema.sql    <-- (Esquema relacional)
+├── worker/
+│   ├── src/
+│   │   ├── index.js                       <-- (Enrutador principal de Cloudflare)
+│   │   ├── openrouter.js                  <-- (Lógica LLM y Contrato JSON)
+│   │   └── supabase.js                    <-- (Conector DB mediante Service Role)
+│   └── wrangler.toml                      <-- (Configuración de Worker)
+├── app-web/
+│   ├── index.html                         <-- (Página principal/Visualizador)
+│   └── js/
+│       ├── ingest.js                      <-- (Script de chunking estructural ciego)
+│       └── highlighter.js                 <-- (Motor de renderizado y resaltado)
+├── bot-discord/
+│   └── bot.js                             <-- (Definición de Slash Commands)
+├── .env.example                           <-- (Plantilla de secretos)
+└── README.md                              <-- (Apunta a esta documentación)
+</pre>
+        </section>
+
+        <section id="database">
+            <h2>4. Esquema Relacional de Base de Datos</h2>
+            <p><strong>Ubicación:</strong> <code>/supabase/migrations/20261015_initial_schema.sql</code></p>
+            <p>Se separa físicamente la estructura del texto (Chunks) de la interpretación gramatical (Figuras). Este código se ejecuta mediante <code>supabase db push</code>.</p>
+<pre><code class="language-sql">-- Habilitar extensión vectorial para embeddings futuros
+CREATE EXTENSION IF NOT EXISTS vector;
+
+-- Tabla de Autores
+CREATE TABLE authors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT UNIQUE NOT NULL
+);
+
+-- Tabla de Obras
+CREATE TABLE works (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    author_id UUID NOT NULL REFERENCES authors(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    entity_type TEXT CHECK (entity_type IN ('canonical', 'student')) NOT NULL DEFAULT 'canonical',
+    UNIQUE(author_id, title)
+);
+
+-- Tabla de Bloques Inmutables (Mecanismo Estructural)
+CREATE TABLE chunks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    work_id UUID NOT NULL REFERENCES works(id) ON DELETE CASCADE,
+    sequence_order INT NOT NULL,
+    raw_text TEXT NOT NULL,
+    embedding VECTOR(768)
+);
+
+-- Tabla de Anotaciones Semánticas (Mecanismo Semántico)
+CREATE TABLE literary_figures (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    chunk_id UUID NOT NULL REFERENCES chunks(id) ON DELETE CASCADE,
+    figure_type TEXT NOT NULL,
+    matched_substring TEXT NOT NULL,
+    explanation TEXT
+);
+
+-- Tabla de Entregas de Estudiantes
+CREATE TABLE student_submissions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_discord_id TEXT NOT NULL,
+    exercise_target TEXT NOT NULL,
+    submitted_text TEXT NOT NULL,
+    fulfilled BOOLEAN NOT NULL,
+    analysis_json JSONB NOT NULL
+);</code></pre>
+        </section>
+
+        <section id="json-contract">
+            <h2>5. Contrato de Respuesta JSON (OpenRouter)</h2>
+            <p><strong>Ubicación:</strong> <code>/worker/src/openrouter.js</code></p>
+            <p>Esquema forzado que el Cloudflare Worker envía a la API de OpenRouter para garantizar que el LLM actúe como un etiquetador estricto y no devuelva prosa conversacional.</p>
+<pre><code class="language-json">{
+  "type": "json_schema",
+  "json_schema": {
+    "name": "literary_figures_extraction",
+    "schema": {
+      "type": "object",
+      "properties": {
+        "figures": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "figure_type": { 
+                "type": "string",
+                "description": "Clasificación gramatical o retórica." 
+              },
+              "matched_substring": { 
+                "type": "string", 
+                "description": "Cadena EXTRAÍDA LITERALMENTE del raw_text. Debe coincidir exactamente para permitir el indexOf() en el frontend." 
+              },
+              "explanation": { 
+                "type": "string" 
+              }
+            },
+            "required": ["figure_type", "matched_substring", "explanation"]
+          }
+        }
+      },
+      "required": ["figures"]
+    }
+  }
+}</code></pre>
+        </section>
+
+        <section id="sop">
+            <h2>6. Standard Operating Procedure (SOP)</h2>
+            <p>Rutinas operativas estándar para desarrollo e interacción en el sistema.</p>
+
+            <div class="sop-block">
+                <h3>SOP-01: Ingesta Atómica y Fragmentación Estructural</h3>
+                <p><strong>Objetivo:</strong> Prevenir duplicidad y separar el texto físicamente sin depender de la gramática.</p>
+                <ol>
+                    <li>El usuario selecciona Autor/Obra en el frontend. El sistema verifica contra Supabase.</li>
+                    <li>Si la obra no existe, se habilita el módulo de carga (<code>.txt</code> o <code>.md</code>).</li>
+                    <li>El script <code>ingest.js</code> en el navegador divide el texto basándose en delimitadores físicos (saltos de línea dobles <code>\n\n</code>).</li>
+                    <li>Los bloques generados se envían a Cloudflare, donde el Worker calcula el embedding vectorial y los almacena en la tabla <code>chunks</code> de Supabase.</li>
+                </ol>
+            </div>
+
+            <div class="sop-block">
+                <h3>SOP-02: Etiquetado Semántico Asíncrono</h3>
+                <p><strong>Objetivo:</strong> Identificar figuras literarias sin alterar el párrafo inmutable original.</p>
+                <ol>
+                    <li>Los <code>chunks</code> sin procesar entran a una cola en el Worker de Cloudflare.</li>
+                    <li>El Worker envía el <code>raw_text</code> a OpenRouter utilizando el Contrato JSON estricto.</li>
+                    <li>El modelo retorna el tipo de figura y la <code>matched_substring</code>.</li>
+                    <li>El Worker inserta estos metadatos en la tabla <code>literary_figures</code>, vinculándolos al bloque correspondiente.</li>
+                </ol>
+            </div>
+
+            <div class="sop-block">
+                <h3>SOP-03: Visualización y Resaltado Dinámico</h3>
+                <p><strong>Objetivo:</strong> Superposición visual de análisis en la interfaz sin consumo de tokens.</p>
+                <ol>
+                    <li>El usuario filtra por obra y tipo de figura literaria en el frontend.</li>
+                    <li>El Worker extrae de Supabase los <code>chunks</code> completos y sus etiquetas asociadas.</li>
+                    <li>El frontend renderiza el <code>raw_text</code> intacto.</li>
+                    <li>El script <code>highlighter.js</code> utiliza <code>indexOf()</code> sobre el texto renderizado para ubicar cada <code>matched_substring</code> y la envuelve dinámicamente con etiquetas <code>&lt;mark&gt;</code> para aplicar estilos CSS.</li>
+                </ol>
+            </div>
+
+            <div class="sop-block">
+                <h3>SOP-04: Evaluación en Discord</h3>
+                <p><strong>Objetivo:</strong> Validar ejercicios prácticos en el entorno del estudiante.</p>
+                <ol>
+                    <li>El estudiante envía el texto mediante el comando <code>/entregar-ejercicio</code>.</li>
+                    <li>El Bot de Discord (<code>bot.js</code>) transfiere el payload al Worker de Cloudflare.</li>
+                    <li>El Worker solicita a OpenRouter una validación binaria (Cumple/No Cumple) basada en los parámetros del ejercicio y la extracción de figuras.</li>
+                    <li>Los resultados se guardan en <code>student_submissions</code> y se envían de vuelta a Discord en formato de tarjeta estructurada.</li>
+                </ol>
+            </div>
+
+            <div class="sop-block">
+                <h3>SOP-05: Administración Colaborativa y CI/CD</h3>
+                <p><strong>Objetivo:</strong> Sincronización entre administradores y agentes (Antigravity IDE).</p>
+                <ol>
+                    <li>Todo el código reside en este repositorio central de GitHub.</li>
+                    <li>Los cambios a la base de datos se ejecutan estrictamente mediante <code>supabase db diff</code> y archivos de migración SQL. Prohibida la edición manual en el panel web.</li>
+                    <li>El desarrollo de agentes se basa en clonar el repositorio y leer los contratos JSON de este archivo.</li>
+                </ol>
+            </div>
+
+            <div class="sop-block">
+                <h3>SOP-06: Capa de Seguridad y Cero Leaks</h3>
+                <p><strong>Objetivo:</strong> Opacidad de infraestructura.</p>
+                <ol>
+                    <li>Supabase rechaza conexiones directas públicas mediante políticas RLS.</li>
+                    <li>Las claves de API (OpenRouter, Supabase) residen únicamente en los secretos del entorno Cloudflare (<code>wrangler secret put</code>).</li>
+                    <li>El Cloudflare Worker realiza un proceso de sanitización eliminando UUIDs internos y vectores antes de retornar cualquier JSON al Frontend o a Discord.</li>
+                </ol>
+            </div>
+        </section>
+    </div>
+</body>
+</html>
